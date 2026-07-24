@@ -2,6 +2,14 @@
 
 > **Note to Reviewers:** This repository serves as a public architectural showcase and technical portfolio. Due to commercial integrity, the proprietary frontend source code (React) and private infrastructure credentials are not included. This repository exposes the core system design, AI orchestration logic, and PostgreSQL database schema (with strict RLS and Tenant Isolation) powering the application.
 
+## Overview: What is Travel Suite Pro?
+
+Travel Suite Pro is a B2B Travel Management ERP built to solve the most expensive bottleneck in travel agencies: translating unstructured, chaotic client requests into strictly typed, financially accurate itineraries.
+
+Instead of relying on manual data entry, the platform leverages an AI-driven semantic extraction pipeline to parse natural language constraints. The AI acts as a sophisticated ingestion engine, but the core value lies in the backend architecture: every AI output is forced through a deterministic `Shell+Rates` pricing model in PostgreSQL. 
+
+This ensures that while the input is probabilistic (AI), the output is mathematically sound, tenant-isolated, and immutably snapshotted upon quote generation.
+
 ```mermaid
 graph TD
     %% Entidades de Usuario
@@ -68,7 +76,7 @@ graph TD
     style JWT fill:#ffcdd2,stroke:#b71c1c,stroke-width:2px
     style Calc fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
 ```
-[![Travel Suite Pro Demo]](https://youtu.be/v2QLugzN89s?si=tJCcjMgiSkZPDzJM)
+[![Travel Suite Pro Demo](https://img.youtube.com/vi/v2QLugzN89s/0.jpg)](https://youtu.be/v2QLugzN89s)
 
 ## Core Principles
 
