@@ -2,196 +2,112 @@
 
 > **Note to Reviewers:** This repository serves as a public architectural showcase and technical portfolio. Due to commercial integrity, the proprietary frontend source code (React) and private infrastructure credentials are not included. This repository exposes the core system design, AI orchestration logic, and PostgreSQL database schema (with strict RLS and Tenant Isolation) powering the application.
 
-## Overview: What is Travel Suite Pro?
+## Travel Suite Pro — Overview
 
-Travel Suite Pro — Overview                                                                                                                    
-                                                                                                                                                 
-  What It Is                                                                                                                                     
-                                                                                                                                                 
-  Travel Suite Pro is a B2B SaaS platform for tour operators and DMCs (Destination Management Companies) to build, price, quote, and manage      
-  custom travel itineraries. It is a multi-tenant system where each organization operates in its own isolated workspace with full data separation
-   enforced at the database level via Row-Level Security and JWT claims.                                                                         
-                  
-  Core Purpose                                                                                                                                   
-  
-  The platform replaces scattered spreadsheets, email chains, and manual报价 processes with a unified workflow: receive a client request →       
-  analyze it → build a day-by-day itinerary → price it with markups → freeze the quote → send to the client → track through confirmation and
-  operations.                                                                                                                                    
-                  
-  Tech Stack                                                                                                                                     
-  
-  - Frontend: React 18 + TypeScript + Vite 5 + SWC                                                                                               
-  - Backend: Supabase (PostgreSQL 17, Auth, Storage, Edge Functions)
-  - State & Data: TanStack Query v5, Zustand (UI only), react-hook-form + Zod                                                                    
-  - UI: shadcn/ui (Radix primitives + Tailwind CSS)                                                                                              
-  - AI Integration: n8n webhook → Google Gemini for natural language request analysis                                                            
-                                                                                                                                                 
-  ---                                                                                                                                            
-  Full Feature Set                                                                                                                               
-                                                                                                                                                 
-  1. Service Catalog Management (Shell + Rates Pattern)
-                                                                                                                                                 
-  Every service type follows a Shell + Rates pattern — metadata lives on a "shell" table, while pricing lives on separate "rates" tables so      
-  multiple suppliers can offer the same service at different prices:
-                                                                                                                                                 
-  ┌────────────────┬────────────────┬────────────────────────────────────────────────┬──────────────────────────────┐
-  │    Service     │  Shell Table   │                  Rates Table                   │        Pricing Models        │
-  ├────────────────┼────────────────┼────────────────────────────────────────────────┼──────────────────────────────┤
-  │ Activities     │ activities     │ activity_rates                                 │ FIXED / PER_PAX / BASE_EXTRA │
-  ├────────────────┼────────────────┼────────────────────────────────────────────────┼──────────────────────────────┤
-  │ Accommodations │ accommodations │ accommodation_rooms → accommodation_room_rates │ Per-room, seasonal rates     │                            
-  ├────────────────┼────────────────┼────────────────────────────────────────────────┼──────────────────────────────┤                            
-  │ Transports     │ transports     │ transport_rates                                │ TRANSFER / DISPOSAL / FLIGHT │                            
-  ├────────────────┼────────────────┼────────────────────────────────────────────────┼──────────────────────────────┤                            
-  │ Guides         │ guides         │ guide_rates                                    │ Per-segment pricing          │
-  ├────────────────┼────────────────┼────────────────────────────────────────────────┼──────────────────────────────┤                            
-  │ Other Services │ other_services │ other_service_rates                            │ FIXED / PER_PAX              │
-  └────────────────┴────────────────┴────────────────────────────────────────────────┴──────────────────────────────┘
+### What It Is
+Travel Suite Pro is a B2B SaaS platform for tour operators and DMCs (Destination Management Companies) to build, price, quote, and manage custom travel itineraries. It is a multi-tenant system where each organization operates in its own isolated workspace with full data separation enforced at the database level via Row-Level Security and JWT claims.
 
-  Each service supports images, location tagging, and soft-delete (is_active).                                                                   
-  
-  2. CRM & Partner Management                                                                                                                    
-                  
-  - Clients — Traveler profiles with passport data, nationality, DOB, dietary restrictions, agent referrals
-  - Agents — Partner travel agencies with commission rates, consortium affiliations, banking info
-  - Consortiums — Groups of agencies with default fee structures                                                                                 
-  - Suppliers — Service providers by category, with linked service types and internal document storage
-  - Locations — Destination catalog with geo-data, aliases, cover images, and usage statistics across services                                   
-                  
-  3. Itinerary Builder (Core Product)                                                                                                            
-  
-  The flagship feature — a full drag-and-drop day-by-day itinerary editor:                                                                       
-                  
-  - Timeline view — Days with itinerary items (activities, check-in/out, transfers, guides)
-  - Service library panel — Search and select services from the catalog, filtered by location
-  - Item details panel — Contextual editing for each service selection (rate choice, cost overrides, components)
-  - Pax assignment — Assign travelers to the itinerary, designate lead passengers                                                                
-  - Requirements checklist — Per-itinerary task tracking via itinerary_requirements
-  - Internal notes — Per-itinerary notes for operator collaboration                                                                              
-  - Room management — Room assignments per accommodation stay, with per-room pricing
-  - Drag-and-drop reordering — Timeline items can be reordered via update_itinerary_items_positions RPC
-                                                                                                                                                 
-  4. AI-Powered Client Request Analysis
-                                                                                                                                                 
-  When a client sends a free-text trip request (e.g., "We are a family of 4 looking for a 7-day trip to Cancun in December with a budget of 
-  $5,000"), the operator pastes it into the builder and triggers the AI analysis:
+### Core Purpose
+The platform replaces scattered spreadsheets, email chains, and manual quotation processes with a unified workflow: receive a client request → analyze it → build a day-by-day itinerary → price it with markups → freeze the quote → send to the client → track through confirmation and operations.
 
-  1. Webhook call — The text is sent to an n8n workflow at https://n8n.collazolutions.space/webhook/request-analysis                             
-  2. Gemini processing — n8n forwards the request to Google Gemini, which returns structured JSON
-  3. Structured output stored in itineraries.request_analysis (JSONB):                                                                           
-    - suggested_title — Auto-generated itinerary title
-    - detected_budget — Estimated budget from the request
-    - pax_count — Number of travelers detected
-    - duration_days — Trip duration
-    - start_date — Proposed start date
-    - summary — Natural language summary of the request
-    - preferences — Optional: room type, group size, travel style
-    - checklist — Array of AI-generated action items, each with:                                                                                 
-        - id — Unique identifier
-      - text — Task description (e.g., "Find a 4-star hotel near the beach")                                                                     
-      - category — Service type: activity, transport, accommodation, guide, other
-      - done — Completion status (toggled via toggleChecklistItem mutation)
+### Tech Stack
+* **Frontend:** React 18 + TypeScript + Vite 5 + SWC
+* **Backend:** Supabase (PostgreSQL 17, Auth, Storage, Edge Functions)
+* **State & Data:** TanStack Query v5, Zustand (UI only), react-hook-form + Zod
+* **UI:** shadcn/ui (Radix primitives + Tailwind CSS)
+* **AI Integration:** n8n webhook → Google Gemini for natural language request analysis
 
-  5. Pricing & Markup Engine
+---
 
-  - Cost calculation — Pure functions in financials.ts using decimal.js for precision
-  - Markup rules — Configurable per-agent or global, with conditions on client tier, trip duration, PAX count
-  - Rule types: MARKUP (profit margin) and OVERHEAD (operational costs)
-  - Action types: FIXED_PER_PAX, FIXED_TOTAL, PERCENTAGE
-  - Priority-based — Rules are ordered and evaluated by priority
-  - Net & Gross totals — Displayed in real-time during itinerary editing
+## Full Feature Set
 
-  6. Quote Freeze & Price Snapshots
+### 1. Service Catalog Management (Shell + Rates Pattern)
+Every service type follows a Shell + Rates pattern — metadata lives on a "shell" table, while pricing lives on separate "rates" tables so multiple suppliers can offer the same service at different prices:
 
-  When an itinerary is ready to send to the client, operators call freeze_itinerary_quote() which:
+| Service | Shell Table | Rates Table | Pricing Models |
+| :--- | :--- | :--- | :--- |
+| Activities | `activities` | `activity_rates` | FIXED / PER_PAX / BASE_EXTRA |
+| Accommodations | `accommodations` | `accommodation_rooms` → `accommodation_room_rates` | Per-room, seasonal rates |
+| Transports | `transports` | `transport_rates` | TRANSFER / DISPOSAL / FLIGHT |
+| Guides | `guides` | `guide_rates` | Per-segment pricing |
+| Other Services | `other_services` | `other_service_rates` | FIXED / PER_PAX |
 
-  - Atomically builds service_snapshot JSONB for every bridge row (stays, activities, transports, guides)                                        
-  - Captures all selected rates, components, segments, and currency exchange info
-  - Sets quote_valid_until = now() + 90 days                                                                                                     
-  - Records exchange_rate_id and quote_sent_at
+Each service supports images, location tagging, and soft-delete (`is_active`).
 
-  Why this matters: Once a quote is sent, catalog price changes do not affect the quoted price. The snapshot permanently captures what was
-  quoted. The frontend's compareWithSnapshot() function can flag discrepancies between current catalog prices and frozen quotes.
+### 2. CRM & Partner Management
+* **Clients:** Traveler profiles with passport data, nationality, DOB, dietary restrictions, agent referrals.
+* **Agents:** Partner travel agencies with commission rates, consortium affiliations, banking info.
+* **Consortiums:** Groups of agencies with default fee structures.
+* **Suppliers:** Service providers by category, with linked service types and internal document storage.
+* **Locations:** Destination catalog with geo-data, aliases, cover images, and usage statistics across services.
 
-  7. RPC Functions (Backend API)
+### 3. Itinerary Builder (Core Product)
+The flagship feature — a full drag-and-drop day-by-day itinerary editor:
+* **Timeline view:** Days with itinerary items (activities, check-in/out, transfers, guides).
+* **Service library panel:** Search and select services from the catalog, filtered by location.
+* **Item details panel:** Contextual editing for each service selection (rate choice, cost overrides, components).
+* **Pax assignment:** Assign travelers to the itinerary, designate lead passengers.
+* **Requirements checklist:** Per-itinerary task tracking via `itinerary_requirements`.
+* **Internal notes:** Per-itinerary notes for operator collaboration.
+* **Room management:** Room assignments per accommodation stay, with per-room pricing.
+* **Drag-and-drop reordering:** Timeline items can be reordered via `update_itinerary_items_positions` RPC.
 
-  40+ PostgreSQL functions organized by domain:
+### 4. AI-Powered Client Request Analysis
+When a client sends a free-text trip request, the operator pastes it into the builder and triggers the AI analysis:
+1. **Webhook call:** The text is sent to an n8n workflow.
+2. **LLM processing:** n8n forwards the request to Google Gemini, which returns structured JSON.
+3. **Structured output stored in `itineraries.request_analysis` (JSONB):** Auto-generated itinerary title, detected budget, PAX count, duration, start date, preferences, and an array of AI-generated action items (checklist).
 
-  - Tenant/Security — get_org_id(), get_auth_org_id(), org_id_jwt_hook(), handle_new_user(), resolve_storage_org_id()
-  - Locations — get_or_create_location(), get_locations_with_stats(), get_orphan_locations()
-  - Pending Services & Assignment — get_pending_services(), assign_unassigned_services(), batch_assign_services_v2()
-  - Supplier Merge — merge_suppliers(), merge_suppliers_v2(), execute_merge_suppliers() (7 iterations to handle all edge cases)                  
-  - Quote Snapshots — build_*_service_snapshot() (per entity), freeze_itinerary_quote() (atomic freeze)
-  - Bulk Operations — rpc_bulk_soft_delete(), rpc_bulk_hard_delete(), rpc_bulk_insert()                                                          
-  - Itinerary Operations — sync_stay_rooms(), update_itinerary_items_positions(), resurrect_record()
-  - Team Management — update_team_member_role(), Edge Functions for invite/remove                                                                
-                  
-  8. Document & Image Management                                                                                                                 
-  
-  - Storage buckets — documents (private, for supplier contracts & internal docs) and media (public, for service images)                         
-  - Storage RLS — Org-level isolation via JWT org_id claim extracted from storage object paths
-  - Images stored as text[] URL arrays on service shells
-  - Internal supplier docs stored as text[] on suppliers                                                                                         
-  
-  9. Team & Access Control                                                                                                                       
-                  
-  - Roles: ADMIN (full access, can manage team) and OPERATOR (can create/edit itineraries and services)
-  - Multi-tenant isolation via organization_id on every table with RLS policies
-  - JWT optimization — org_id injected into JWT claims via auth hook, avoiding per-query JOINs                                                   
-  - Team management — Invite via email, role updates, user removal
-                                                                                                                                                 
-  10. Data Utilities
+### 5. Pricing & Markup Engine
+* **Cost calculation:** Pure functions in `financials.ts` using decimal.js for precision.
+* **Markup rules:** Configurable per-agent or global, with conditions on client tier, trip duration, PAX count.
+* **Priority-based:** Rules are ordered and evaluated by priority to display net & gross totals in real-time.
 
-  - CSV import — Bulk service import with supplier resolution, location find-or-create, progress reporting                                       
-  - JSON package export/import — Full data portability for service catalogs between organizations
-                                                                                                                                                 
-  ---             
-  AI Roadmap: From AI Checklist to Pre-Itinerary
+### 6. Quote Freeze & Price Snapshots
+When an itinerary is ready to send, operators call `freeze_itinerary_quote()` which atomically builds a `service_snapshot` JSONB for every bridge row. 
 
-  Current State: AI-Generated Checklist
+**Why this matters:** Once a quote is sent, catalog price changes do not affect the quoted price. The snapshot permanently captures what was quoted, preventing financial drift.
 
-  Today, the AI (Gemini via n8n) produces a flat checklist of action items after analyzing a client request. Each checklist item has a category, 
-  a description, and a done/undone toggle. The operator manually checks off items as they research and add services. Essentially, it is a smart 
-  to-do list — helpful, but still requires the operator to do all the legwork of searching the catalog and assembling the itinerary piece by     
-  piece.          
+### 7. RPC Functions (Backend API)
+40+ PostgreSQL functions organized by domain, handling everything from Tenant/Security (`org_id_jwt_hook`), Supplier Merging, Bulk Operations, to Quote Snapshots.
 
-  The Evolution: AI-Generated Pre-Itinerary                                                                                                      
-  
-  The vision is to evolve this into a full pre-itinerary that the AI assembles automatically from the catalog:                                   
-                  
-  1. AI analyzes the client request (same as today) — detects destination, dates, PAX count, budget, preferences
-  2. AI queries the service catalog — instead of just generating a checklist, the AI searches the platform's own database for:
-    - Available accommodations matching the budget and preferences                                                                               
-    - Activities offered in the destination region
-    - Transfer options between locations                                                                                                         
-    - Available guides with relevant expertise
-  3. AI assembles a draft itinerary — a complete day-by-day structure with:
-    - Suggested activities placed on specific days
-    - Accommodation assignments per night                                                                                                        
-    - Transfer scheduling between locations
-    - Guide assignments                                                                                                                          
-    - Preliminary pricing based on catalog rates
-  4. Human operator reviews & refines — the operator acts as an editor and quality controller:
-    - Adjusts day assignments
-    - Swaps suggested services for alternatives
-    - Fine-tunes pricing, applies markups
-    - Adds personal notes and client-specific touches                                                                                            
-  5. Operator freezes and sends the quote — the existing freeze_itinerary_quote workflow finalizes the price
-                                                                                                                                                 
-  Why This Matters
+### 8. Document & Image Management
+* **Storage buckets:** `documents` (private) and `media` (public).
+* **Storage RLS:** Org-level isolation via JWT `org_id` claim extracted from storage object paths.
 
-  - Dramatically reduces itinerary assembly time — from hours to minutes                                                                         
-  - Operators focus on value-add — personalization, quality control, client relationships — instead of data entry
-  - Faster quote turnaround — competitive advantage in a fast-moving market                                                                      
-  - AI learns from operator corrections — the system can improve over time by analyzing which AI suggestions operators accept or reject
-                                                                                                                                                 
-  Technical Considerations for the Evolution
-                                                                                                                                                 
-  - Semantic search over the service catalog (currently basic text search) will need vector embeddings for meaningful AI matching
-  - Constraint satisfaction — the AI must respect real-world logistics (e.g., you can't do a morning activity in Tulum and an afternoon one in
-  Chichen Itza)                                                                                                                                  
-  - Budget optimization — the AI should suggest services that fit within the detected budget, or flag trade-offs
-  - Operator feedback loop — track which AI suggestions are accepted/rejected/modified to train a better model over time                         
+### 9. Team & Access Control
+* **Roles:** ADMIN and OPERATOR.
+* **Multi-tenant isolation:** Enforced via `organization_id` on every table with RLS policies.
+* **JWT optimization:** `org_id` injected into JWT claims via auth hook, avoiding expensive per-query JOINs.
+
+### 10. Data Utilities
+* **CSV import:** Bulk service import with supplier resolution.
+* **JSON package export/import:** Full data portability for service catalogs between organizations.
+
+---
+
+## AI Roadmap: From AI Checklist to Pre-Itinerary
+
+### Current State: AI-Generated Checklist
+Today, the AI produces a flat checklist of action items after analyzing a client request. The operator manually checks off items as they research and add services. It is a smart to-do list, but requires manual legwork to assemble the itinerary.
+
+### The Evolution: AI-Generated Pre-Itinerary
+The vision is to evolve this into a full pre-itinerary assembled automatically from the catalog:
+1. **AI analyzes the client request:** Detects destination, dates, PAX, budget, preferences.
+2. **AI queries the service catalog:** Searches the platform's own database for matching accommodations, activities, and transfers.
+3. **AI assembles a draft itinerary:** A complete day-by-day structure with preliminary pricing.
+4. **Human operator reviews & refines:** The operator acts as an editor and quality controller (adjusting days, fine-tuning pricing, adding personal notes).
+5. **Operator freezes and sends the quote.**
+
+### Why This Matters
+* Dramatically reduces itinerary assembly time from hours to minutes.
+* Operators focus on value-add (personalization, QC) instead of data entry.
+* The system learns over time by analyzing which AI suggestions operators accept or reject.
+
+### Technical Considerations for the Evolution
+* Semantic search over the service catalog will require vector embeddings.
+* Constraint satisfaction (the AI must respect real-world logistics).
+* Budget optimization to fit within the detected budget constraints.                 
                   
 
 ```mermaid
