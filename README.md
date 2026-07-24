@@ -9,7 +9,7 @@ graph TD
     Operator([Travel Operator / Agent])
 
     %% Interfaz de Usuario
-    subgraph Client-Side (React)
+    subgraph Frontend [Client-Side React]
         UI[Optimistic UI Component]
         TSQ[TanStack Query - Server State]
         Zustand[Zustand - Pure UI State]
@@ -17,17 +17,17 @@ graph TD
     end
 
     %% Capa de Inteligencia Artificial
-    subgraph AI Extraction Pipeline (OpenClaude / Spec Kit)
+    subgraph AI [AI Extraction Pipeline]
         Prompt[System Prompt & Context]
         LLM{LLM Engine}
         JSON_Val[Strict JSON Schema Validator]
     end
 
     %% Base de Datos (Supabase / PostgreSQL)
-    subgraph Supabase (PostgreSQL)
+    subgraph Supabase [Supabase PostgreSQL]
         JWT[JWT org_id Auth Hook]
         
-        subgraph Shell & Rates Pattern
+        subgraph ShellRates [Shell and Rates Pattern]
             Shell[(Shell Tables: Metadata)]
             Rates[(Rate Tables: Pricing)]
         end
